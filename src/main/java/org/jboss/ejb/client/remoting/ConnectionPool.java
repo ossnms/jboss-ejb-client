@@ -26,11 +26,9 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.security.Principal;
 import java.util.Collection;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.net.ssl.SSLSession;
 import javax.security.auth.callback.CallbackHandler;
@@ -71,50 +69,57 @@ class ConnectionPool {
 
     }
 
-    synchronized Connection getConnection(final Endpoint clientEndpoint, final String protocol, final String host, final int port, final EJBClientConfiguration.CommonConnectionCreationConfiguration connectionConfiguration) throws IOException {
+    Connection getConnection(final Endpoint clientEndpoint, final String protocol, final String host, final int port, final EJBClientConfiguration.CommonConnectionCreationConfiguration connectionConfiguration) throws IOException {
         final CacheKey key = new CacheKey(clientEndpoint, connectionConfiguration.getCallbackHandler(), connectionConfiguration.getConnectionCreationOptions(), host, port, protocol);
-        PooledConnection pooledConnection = cache.get(key);
-        if (pooledConnection == null) {
-            final IoFuture<Connection> futureConnection = NetworkUtil.connect(clientEndpoint, protocol, host, port, null, connectionConfiguration.getConnectionCreationOptions(), connectionConfiguration.getCallbackHandler(), null);
-            // wait for the connection to be established
-            final Connection connection = IoFutureHelper.get(futureConnection, connectionConfiguration.getConnectionTimeout(), TimeUnit.MILLISECONDS);
-            // We don't want to hold stale connection(s), so add a close handler which removes the entry
-            // from the cache when the connection is closed
-            connection.addCloseHandler(new CacheEntryRemovalHandler(key));
+        PooledConnection pooledConnection;
+        boolean connected = false;
 
-            pooledConnection = new PooledConnection(key, connection);
-            // add it to the cache
-            cache.put(key, pooledConnection);
+        // ensure there is a cache entry representing a request with the current parameters
+        synchronized (this) {
+            pooledConnection = cache.get(key);
+            if (pooledConnection == null) {
+                pooledConnection = new PooledConnection(clientEndpoint, protocol, host, port, connectionConfiguration.getConnectionCreationOptions(), connectionConfiguration.getCallbackHandler(), key, new CacheEntryRemovalHandler(key));
+                cache.put(key, pooledConnection);
+            }
+            pooledConnection.incRef();
         }
-        pooledConnection.referenceCount.incrementAndGet();
+
+        // wait for the connection to be established
+        try {
+            pooledConnection.waitConnected(connectionConfiguration.getConnectionTimeout(), TimeUnit.MILLISECONDS);
+            connected = true;
+        } finally {
+            if (!connected) {
+                release(key, false);
+            }
+        }
+
         return pooledConnection;
     }
 
-    synchronized void release(final CacheKey connectionHash, final boolean async) {
+    void release(final CacheKey connectionHash, final boolean async) {
         final PooledConnection pooledConnection = cache.get(connectionHash);
         if (pooledConnection == null) {
             return;
         }
-        if (pooledConnection.referenceCount.decrementAndGet() == 0) {
-            try {
-                final Connection connection = pooledConnection.underlyingConnection;
-                if (async) {
-                    connection.closeAsync();
-                } else {
-                    safeClose(connection);
-                }
-            } finally {
-                cache.remove(connectionHash);
+        synchronized (this) {
+            if (pooledConnection.decRef() > 0) {
+                return;
             }
+            cache.remove(connectionHash);
         }
+        pooledConnection.destroy(async);
     }
 
-    private synchronized void shutdown() {
-        for (Map.Entry<CacheKey, PooledConnection> entry : cache.entrySet()) {
-            final Connection connection = entry.getValue().underlyingConnection;
-            safeClose(connection);
+    private void shutdown() {
+        Collection<PooledConnection> pooledConnections;
+        synchronized (this) {
+            pooledConnections = cache.values();
+            cache.clear();
         }
-        cache.clear();
+        for (PooledConnection pooledConnection : pooledConnections) {
+            pooledConnection.destroy(false);
+        }
 
         if(Thread.currentThread().getId() != SHUTDOWN_TASK.getId())
             SecurityActions.removeShutdownHook(SHUTDOWN_TASK);
@@ -184,13 +189,64 @@ class ConnectionPool {
      * The pooled connection
      */
     private final class PooledConnection implements Connection {
-        private final AtomicInteger referenceCount = new AtomicInteger(0);
+        private int referenceCount = 0;
         private final CacheKey cacheKey;
-        private final Connection underlyingConnection;
+        private Connection underlyingConnection;
 
-        PooledConnection(final CacheKey key, final Connection connection) {
+        private final CacheEntryRemovalHandler cacheEntryRemovalHandler;
+        private final Endpoint clientEndpoint;
+        private final String protocol;
+        private final String host;
+        private final int port;
+        private final OptionMap connectionCreationOptions;
+        private final CallbackHandler callbackHandler;
+
+        private boolean destroyed = false;
+
+        PooledConnection(Endpoint clientEndpoint, String protocol, String host, int port, OptionMap connectionCreationOptions, CallbackHandler callbackHandler, CacheKey key, CacheEntryRemovalHandler cacheEntryRemovalHandler) {
             this.cacheKey = key;
-            this.underlyingConnection = connection;
+            this.cacheEntryRemovalHandler = cacheEntryRemovalHandler;
+            this.clientEndpoint = clientEndpoint;
+            this.protocol = protocol;
+            this.host = host;
+            this.port = port;
+            this.connectionCreationOptions = connectionCreationOptions;
+            this.callbackHandler = callbackHandler;
+        }
+
+        int incRef() {
+            return ++referenceCount;
+        }
+
+        int decRef() {
+            return --referenceCount;
+        }
+
+        synchronized void waitConnected(long connectionTimeout, TimeUnit timeUnit) throws IOException {
+            if (destroyed) {
+                throw new IOException("Shutdown in progress. No new connections allowed.");
+            }
+            if (underlyingConnection == null) {
+                IoFuture<Connection> futureConnection = NetworkUtil.connect(clientEndpoint, protocol, host, port, null, connectionCreationOptions, callbackHandler, null);
+                // wait for the connection to be established
+                underlyingConnection = IoFutureHelper.get(futureConnection, connectionTimeout, timeUnit);
+                // We don't want to hold stale connection(s), so add a close handler which removes the entry
+                // from the cache when the connection is closed
+                underlyingConnection.addCloseHandler(cacheEntryRemovalHandler);
+            }
+        }
+
+        synchronized void destroy(boolean async) {
+            if (!destroyed) {
+                destroyed = true;
+                if (underlyingConnection != null) {
+                    if (async) {
+                        underlyingConnection.closeAsync();
+                    } else {
+                        safeClose(underlyingConnection);
+                    }
+                }
+            }
         }
 
         @Override
