@@ -1307,6 +1307,19 @@ public final class EJBClientContext extends Attachable implements Closeable {
                 logger.debugf(t, "Ignoring the exception thrown by an EJB client context listener while closing the context %s", this);
             }
         }
+
+        ejbClientContextTasksExecutorService.shutdown();
+
+        boolean finished = false;
+        try {
+            finished = ejbClientContextTasksExecutorService.awaitTermination(5, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+        }finally {
+            if (!finished) {
+                ejbClientContextTasksExecutorService.shutdownNow();
+            }
+        }
+
     }
 
     @Override
