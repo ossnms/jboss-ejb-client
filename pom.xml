@@ -33,7 +33,7 @@
     </parent>
 
     <artifactId>jboss-ejb-client</artifactId>
-    <version>2.1.6.Final-ossnms-001</version>
+    <version>2.1.6.Final-ossnms-002-SNAPSHOT</version>
 
     <name>JBoss EJB client</name>
     <description>Client library for EJB applications working against Wildfly</description>
@@ -53,6 +53,9 @@
 
         <maven.compiler.source>1.6</maven.compiler.source>
         <maven.compiler.target>1.6</maven.compiler.target>
+
+        <nexus-host>http://nexus-lis.intra.coriant.com/</nexus-host>
+        <project.scm.id>ossnms</project.scm.id>
     </properties>
 
     <build>
@@ -229,4 +232,13 @@
         <developerConnection>scm:git:git@github.com:ossnms/jboss-ejb-client.git</developerConnection>
         <url>https://github.com/ossnms/jboss-ejb-client</url>
     </scm>
+
+    <distributionManagement>
+        <repository>
+            <id>releases</id>
+            <name>TNMS - releases repository</name>
+            <url>${nexus-host}/nexus/content/repositories/releases/</url>
+        </repository>
+    </distributionManagement>
+
 </project>
