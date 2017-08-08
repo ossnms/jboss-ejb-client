@@ -22,8 +22,7 @@
   ~ 02110-1301 USA, or see the FSF site: http://www.fsf.org.
   -->
 
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
@@ -33,7 +32,7 @@
     </parent>
 
     <artifactId>jboss-ejb-client</artifactId>
-    <version>2.1.6.Final-ossnms-002-SNAPSHOT</version>
+    <version>2.1.6.Final-ossnms-002</version>
 
     <name>JBoss EJB client</name>
     <description>Client library for EJB applications working against Wildfly</description>
@@ -94,7 +93,7 @@
                     <configLocation>${basedir}/src/config/checkstyle.xml</configLocation>
                     <consoleOutput>true</consoleOutput>
                     <failsOnError>true</failsOnError>
-                    <useFile/>
+                    <useFile />
                     <linkXRef>false</linkXRef>
                 </configuration>
                 <executions>
@@ -238,7 +237,8 @@
         <connection>scm:git:https://github.com/ossnms/jboss-ejb-client.git</connection>
         <developerConnection>scm:git:https://github.com/ossnms/jboss-ejb-client.git</developerConnection>
         <url>https://github.com/ossnms/jboss-ejb-client</url>
-    </scm>
+      <tag>jboss-ejb-client-2.1.6.Final-ossnms-002</tag>
+  </scm>
 
     <distributionManagement>
         <repository>
