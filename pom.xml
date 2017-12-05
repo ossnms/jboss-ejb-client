@@ -32,7 +32,7 @@
     </parent>
 
     <artifactId>jboss-ejb-client</artifactId>
-    <version>2.1.8.Final-ossnms-002-SNAPSHOT</version>
+    <version>2.1.8.Final-ossnms-002</version>
 
     <name>JBoss EJB client</name>
     <description>Client library for EJB applications working against Wildfly</description>
@@ -237,7 +237,7 @@
         <connection>scm:git:https://github.com/ossnms/jboss-ejb-client.git</connection>
         <developerConnection>scm:git:https://github.com/ossnms/jboss-ejb-client.git</developerConnection>
         <url>https://github.com/ossnms/jboss-ejb-client</url>
-        <tag>HEAD</tag>
+        <tag>2.1.8.Final-ossnms-002</tag>
     </scm>
 
     <distributionManagement>
