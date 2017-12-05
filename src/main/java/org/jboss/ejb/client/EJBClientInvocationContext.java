@@ -412,26 +412,23 @@ public final class EJBClientInvocationContext extends Attachable {
                         if (invocationTimeout <= 0) {
                             lock.wait();
                         } else {
-                            waitStartTime = System.currentTimeMillis();
-                            // we wait for a specific amount of time
-                            lock.wait(remainingWaitTimeout);
+                            try {
+                                waitStartTime = System.currentTimeMillis();
+                                // we wait for a specific amount of time
+                                lock.wait(remainingWaitTimeout);
+                            } finally {
+                                remainingWaitTimeout -= System.currentTimeMillis() - waitStartTime;
+                            }
                         }
                     } catch (InterruptedException e) {
                         intr = true;
                         // if there was a invocation timeout configured and the thread was interrupted
-                        // then figure out how long we waited and what remaining time we should wait for
-                        // if the result hasn't yet arrived
-                        if (invocationTimeout > 0) {
-                            final long timeWaitedFor = System.currentTimeMillis() - waitStartTime;
-                            // we already waited enough, so setup a result producer which will
+                        // then figure out what remaining time we should wait for if the result hasn't yet arrived
+                        if (state == State.WAITING && invocationTimeout > 0 && remainingWaitTimeout <= 0) {
+                            // we already waited enough, so setup a timeout result producer which will
                             // let the client know that the invocation timed out
-                            if (timeWaitedFor >= remainingWaitTimeout) {
-                                // setup a invocation timeout result producer
-                                this.resultReady(new InvocationTimeoutResultProducer(invocationTimeout));
-                                break;
-                            } else {
-                                remainingWaitTimeout = remainingWaitTimeout - timeWaitedFor;
-                            }
+                            this.resultReady(new InvocationTimeoutResultProducer(invocationTimeout));
+                            break;
                         }
                         continue;
                     }
@@ -443,7 +440,7 @@ public final class EJBClientInvocationContext extends Attachable {
                     }
                     // If the state is still waiting and the invocation timeout was specified,
                     // then it indicates that the Object.wait(timeout) returned due to a timeout.
-                    if (state == State.WAITING && invocationTimeout > 0) {
+                    if (state == State.WAITING && invocationTimeout > 0 && remainingWaitTimeout <= 0) {
                         // setup a invocation timeout result producer
                         this.resultReady(new InvocationTimeoutResultProducer(invocationTimeout));
                         break;
